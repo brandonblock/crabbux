@@ -1,8 +1,8 @@
-use accounts::Tx;
-
-use crate::accounts::Accounts;
+use crate::{accounts::Accounts, tx::Tx};
 use std::{io, println};
 mod accounts;
+mod errors;
+mod tx;
 
 enum InputResult {
     Quit,

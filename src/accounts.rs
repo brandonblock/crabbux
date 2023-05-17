@@ -1,13 +1,6 @@
+use crate::{errors::AccountingError, tx::Tx};
 use std::collections::HashMap;
 use std::fmt;
-
-/// An application-specific error type
-#[derive(Debug)]
-pub enum AccountingError {
-    NotFound(String),
-    UnderFunded(String, u64),
-    OverFunded(String, u64),
-}
 
 impl fmt::Display for AccountingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -28,15 +21,6 @@ impl fmt::Display for AccountingError {
 }
 
 impl std::error::Error for AccountingError {}
-
-/// A transaction type. Transaction replay should be able to rebuild a ledger's state
-/// when they are applied in the same sequence to an empty state.
-#[derive(Debug)]
-pub enum Tx {
-    // Add variants for storing withdraw/deposit transactions
-    Deposit { account: String, amount: u64 },
-    Withdraw { account: String, amount: u64 },
-}
 
 /// A type for managing accounts and their current currency balance
 #[derive(Debug)]
@@ -107,5 +91,65 @@ impl Accounts {
             self.withdraw(sender, amount)?,
             self.deposit(recipient, amount)?,
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Accounts;
+    use super::*;
+
+    #[test]
+    fn test_withdraw_underfunded() {
+        let mut ledger = Accounts::new(); // Assuming you have a Ledger struct
+        let signer = "test_account";
+        ledger.accounts.insert(signer.to_string(), 50); // Insert a test account with balance 50
+
+        match ledger.withdraw(signer, 100) {
+            Ok(_) => panic!("Expected UnderFunded error, but got Ok(_)"),
+            Err(e) => match e {
+                AccountingError::UnderFunded(account, amount) => {
+                    assert_eq!(account, signer);
+                    assert_eq!(amount, 100);
+                }
+                _ => panic!("Expected UnderFunded error, but got a different error"),
+            },
+        }
+    }
+    #[test]
+    fn test_accounts_deposit_overfunded() {
+        todo!();
+    }
+
+    #[test]
+    fn test_accounts_deposit_works() {
+        let mut ledger = Accounts::new(); // Assuming you have a Ledger struct
+        let signer = "test_account";
+        ledger.accounts.insert(signer.to_string(), 0); // Insert a test account with balance 50
+
+        match ledger.deposit(signer, 100) {
+            Ok(_) => assert_eq!(*ledger.accounts.get("test_account").unwrap(), 100),
+            Err(e) => panic!("Expected deposit to work but got error{:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_accounts_withdraw_works() {
+        todo!();
+    }
+
+    #[test]
+    fn test_accounts_send_works() {
+        todo!();
+    }
+
+    #[test]
+    fn test_accounts_send_underfunded_fails_and_rolls_back() {
+        todo!();
+    }
+
+    #[test]
+    fn test_accounts_send_overfunded_fails_and_rolls_back() {
+        todo!();
     }
 }
