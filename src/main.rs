@@ -1,15 +1,38 @@
+use crate::accounts::Accounts;
 use std::{io, println, todo};
 mod accounts;
 
 fn main() {
+    // Creates the basic ledger and a tx log container
+    let mut ledger = Accounts::new();
+    // let mut tx_log = vec![];
+
     loop {
         let input = read_from_stdin(
-            "Choose operation [deposit, withdraw, send, print, quit], confirm with return:",
+            "Please choose [deposit, withdraw, send, print, quit] and  hit return:",
         );
 
         match input.as_str() {
-            "deposit" => todo!(),
-            "withdraw" => todo!(),
+            "deposit" => {
+                let account = read_from_stdin("Account:");
+                let amount: u64 = read_from_stdin("Amount").parse().unwrap();
+                if let Ok(s) = ledger
+                    .deposit(&account, amount)
+                    .map_err(|e| println!("encountered error: {:?}", e))
+                {
+                    println!("{:?}", s);
+                };
+            }
+            "withdraw" => {
+                let account = read_from_stdin("Account:");
+                let amount: u64 = read_from_stdin("Amount").parse().unwrap();
+                if let Ok(s) = ledger
+                    .withdraw(&account, amount)
+                    .map_err(|e| println!("encountered error: {:?}", e))
+                {
+                    println! {"{:?}", s};
+                }
+            }
             "send" => todo!(),
             "print" => todo!(),
             "quit" => todo!(),
@@ -23,12 +46,8 @@ fn main() {
     // // the data type could remain the same
     // let bob = "bob";
     // let alice = "alice";
-    // let charlie = "charlie";s
+    // let charlie = "charlie";
     // let initial_amount = 100;
-
-    // // Creates the basic ledger and a tx log container
-    // let mut ledger = Accounts::new();
-    // let mut tx_log = vec![];
 
     // // Deposit an amount to each account
     // for signer in &[bob, alice, charlie] {
