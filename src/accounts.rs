@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 
 /// An application-specific error type
 #[derive(Debug)]
@@ -7,6 +8,26 @@ pub enum AccountingError {
     UnderFunded(String, u64),
     OverFunded(String, u64),
 }
+
+impl fmt::Display for AccountingError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            AccountingError::NotFound(account) => write!(f, "Account {} not found", account),
+            AccountingError::UnderFunded(account, amount) => write!(
+                f,
+                "Account {} is underfunded; required amount is {}",
+                account, amount
+            ),
+            AccountingError::OverFunded(account, amount) => write!(
+                f,
+                "Account {} is overfunded; maximum allowed amount is {}",
+                account, amount
+            ),
+        }
+    }
+}
+
+impl std::error::Error for AccountingError {}
 
 /// A transaction type. Transaction replay should be able to rebuild a ledger's state
 /// when they are applied in the same sequence to an empty state.
