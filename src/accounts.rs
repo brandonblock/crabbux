@@ -87,10 +87,24 @@ impl Accounts {
         recipient: &str,
         amount: u64,
     ) -> Result<(Tx, Tx), AccountingError> {
-        Ok((
-            self.withdraw(sender, amount)?,
-            self.deposit(recipient, amount)?,
-        ))
+        let sender_previous_balance = *self
+            .accounts
+            .get(sender)
+            .ok_or(AccountingError::NotFound(sender.to_string()))?;
+
+        match self.withdraw(sender, amount) {
+            Ok(withdrawal_tx) => match self.deposit(recipient, amount) {
+                Ok(deposit_tx) => Ok((withdrawal_tx, deposit_tx)),
+                Err(AccountingError::OverFunded(account, amount)) => {
+                    // If the deposit fails due to OverFunded error,
+                    // restore the sender's balance and return the error
+                    *self.accounts.get_mut(sender).unwrap() = sender_previous_balance;
+                    Err(AccountingError::OverFunded(account, amount))
+                }
+                Err(e) => Err(e),
+            },
+            Err(e) => Err(e),
+        }
     }
 }
 
@@ -101,10 +115,12 @@ mod tests {
 
     #[test]
     fn test_withdraw_underfunded() {
-        let mut ledger = Accounts::new(); // Assuming you have a Ledger struct
+        //arrange
+        let mut ledger = Accounts::new();
         let signer = "test_account";
         ledger.accounts.insert(signer.to_string(), 50); // Insert a test account with balance 50
 
+        //act
         match ledger.withdraw(signer, 100) {
             Ok(_) => panic!("Expected UnderFunded error, but got Ok(_)"),
             Err(e) => match e {
@@ -118,15 +134,32 @@ mod tests {
     }
     #[test]
     fn test_accounts_deposit_overfunded() {
-        todo!();
+        //arrange
+        let mut ledger = Accounts::new();
+        let signer = "test_account";
+        ledger.accounts.insert(signer.to_string(), 50); // Insert a test account with balance 50
+
+        //act
+        match ledger.deposit(signer, std::u64::MAX) {
+            Ok(_) => panic!("Expected OverFunded error, but got Ok(_)"),
+            Err(e) => match e {
+                AccountingError::OverFunded(account, amount) => {
+                    assert_eq!(account, signer);
+                    assert_eq!(amount, 18446744073709551615);
+                }
+                _ => panic!("Expected UnderFunded error, but got a different error"),
+            },
+        }
     }
 
     #[test]
     fn test_accounts_deposit_works() {
-        let mut ledger = Accounts::new(); // Assuming you have a Ledger struct
+        //arrange
+        let mut ledger = Accounts::new();
         let signer = "test_account";
-        ledger.accounts.insert(signer.to_string(), 0); // Insert a test account with balance 50
+        ledger.accounts.insert(signer.to_string(), 0);
 
+        //act
         match ledger.deposit(signer, 100) {
             Ok(_) => assert_eq!(*ledger.accounts.get("test_account").unwrap(), 100),
             Err(e) => panic!("Expected deposit to work but got error{:?}", e),
@@ -135,21 +168,70 @@ mod tests {
 
     #[test]
     fn test_accounts_withdraw_works() {
-        todo!();
+        //arrange
+        let mut ledger = Accounts::new();
+        let signer = "test_account";
+        ledger.accounts.insert(signer.to_string(), 100);
+
+        //act
+        match ledger.withdraw(signer, 100) {
+            Ok(_) => assert_eq!(*ledger.accounts.get("test_account").unwrap(), 0),
+            Err(e) => panic!("Expected deposit to work but got error{:?}", e),
+        }
     }
 
     #[test]
     fn test_accounts_send_works() {
-        todo!();
+        let mut ledger = Accounts::new();
+        let sender = "test_account";
+        let receiver = "test_account2";
+        ledger.accounts.insert(sender.to_string(), 100);
+        ledger.accounts.insert(receiver.to_string(), 0);
+
+        //act
+        match ledger.send(sender, receiver, 100) {
+            Ok(_) => assert_eq!(*ledger.accounts.get("test_account2").unwrap(), 100),
+            Err(e) => panic!("Expected deposit to work but got error{:?}", e),
+        }
     }
 
     #[test]
     fn test_accounts_send_underfunded_fails_and_rolls_back() {
-        todo!();
+        let mut ledger = Accounts::new();
+        let sender = "test_account";
+        let receiver = "test_account2";
+        ledger.accounts.insert(sender.to_string(), 10);
+        ledger.accounts.insert(receiver.to_string(), 0);
+
+        //act
+        match ledger.send(sender, receiver, 100) {
+            Ok(tx) => panic!("Expected send to fail but but succeeded. Tx:{:?}", tx),
+            Err(e) => match e {
+                AccountingError::UnderFunded(sender, 100) => {
+                    assert_eq!(*ledger.accounts.get(&sender).unwrap(), 10)
+                }
+                _ => panic!("Expected UnderFunded error, but got a different error"),
+            },
+        };
     }
 
     #[test]
     fn test_accounts_send_overfunded_fails_and_rolls_back() {
-        todo!();
+        let mut ledger = Accounts::new();
+        let sender = "test_account";
+        let receiver = "test_account2";
+        ledger.accounts.insert(sender.to_string(), std::u64::MAX);
+        ledger.accounts.insert(receiver.to_string(), 10);
+
+        //act
+        match ledger.send(sender, receiver, std::u64::MAX) {
+            Ok(tx) => panic!("Expected send to fail but but succeeded. Tx:{:?}", tx),
+            Err(e) => match e {
+                AccountingError::OverFunded(sender, 18446744073709551615) => {
+                    assert_eq!(*ledger.accounts.get(&sender).unwrap(), 10)
+                }
+                _ => panic!("Expected OverFunded error, but got a different error"),
+            },
+        };
     }
 }
