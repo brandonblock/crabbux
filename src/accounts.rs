@@ -1,17 +1,17 @@
-use crate::{errors::AccountingError, tx::Tx};
+use crate::{errors::ApplicationError, tx::Tx};
 use std::collections::HashMap;
 use std::fmt;
 
-impl fmt::Display for AccountingError {
+impl fmt::Display for ApplicationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            AccountingError::NotFound(account) => write!(f, "Account {} not found", account),
-            AccountingError::UnderFunded(account, amount) => write!(
+            ApplicationError::NotFound(account) => write!(f, "Account {} not found", account),
+            ApplicationError::UnderFunded(account, amount) => write!(
                 f,
                 "Account {} is underfunded; required amount is {}",
                 account, amount
             ),
-            AccountingError::OverFunded(account, amount) => write!(
+            ApplicationError::OverFunded(account, amount) => write!(
                 f,
                 "Account {} is overfunded; maximum allowed amount is {}",
                 account, amount
@@ -20,7 +20,7 @@ impl fmt::Display for AccountingError {
     }
 }
 
-impl std::error::Error for AccountingError {}
+impl std::error::Error for ApplicationError {}
 
 /// A type for managing accounts and their current currency balance
 #[derive(Debug)]
@@ -39,12 +39,12 @@ impl Accounts {
     /// Either deposits the `amount` provided into the `signer` account or adds the amount to the existing account.
     /// # Errors
     /// Attempted overflow
-    pub fn deposit(&mut self, signer: &str, amount: u64) -> Result<Tx, AccountingError> {
+    pub fn deposit(&mut self, signer: &str, amount: u64) -> Result<Tx, ApplicationError> {
         if let Some(account) = self.accounts.get_mut(signer) {
             (*account)
                 .checked_add(amount)
                 .map(|r| *account = r)
-                .ok_or(AccountingError::OverFunded(signer.to_string(), amount))
+                .ok_or(ApplicationError::OverFunded(signer.to_string(), amount))
                 // Using map() here is an easy way to only manipulate the non-error result
                 .map(|_| Tx::Deposit {
                     account: signer.to_string(),
@@ -62,18 +62,18 @@ impl Accounts {
     /// Withdraws the `amount` from the `signer` account.
     /// # Errors
     /// Attempted overflow
-    pub fn withdraw(&mut self, signer: &str, amount: u64) -> Result<Tx, AccountingError> {
+    pub fn withdraw(&mut self, signer: &str, amount: u64) -> Result<Tx, ApplicationError> {
         if let Some(bal) = self.accounts.get_mut(signer) {
             (*bal)
                 .checked_sub(amount)
                 .map(|r| *bal = r)
-                .ok_or(AccountingError::UnderFunded(signer.to_string(), amount))
+                .ok_or(ApplicationError::UnderFunded(signer.to_string(), amount))
                 .map(|_| Tx::Withdraw {
                     account: signer.to_string(),
                     amount,
                 })
         } else {
-            Err(AccountingError::NotFound(signer.to_string()))
+            Err(ApplicationError::NotFound(signer.to_string()))
         }
     }
 
@@ -86,20 +86,20 @@ impl Accounts {
         sender: &str,
         recipient: &str,
         amount: u64,
-    ) -> Result<(Tx, Tx), AccountingError> {
+    ) -> Result<(Tx, Tx), ApplicationError> {
         let sender_previous_balance = *self
             .accounts
             .get(sender)
-            .ok_or(AccountingError::NotFound(sender.to_string()))?;
+            .ok_or(ApplicationError::NotFound(sender.to_string()))?;
 
         match self.withdraw(sender, amount) {
             Ok(withdrawal_tx) => match self.deposit(recipient, amount) {
                 Ok(deposit_tx) => Ok((withdrawal_tx, deposit_tx)),
-                Err(AccountingError::OverFunded(account, amount)) => {
+                Err(ApplicationError::OverFunded(account, amount)) => {
                     // If the deposit fails due to OverFunded error,
                     // restore the sender's balance and return the error
                     *self.accounts.get_mut(sender).unwrap() = sender_previous_balance;
-                    Err(AccountingError::OverFunded(account, amount))
+                    Err(ApplicationError::OverFunded(account, amount))
                 }
                 Err(e) => Err(e),
             },
@@ -124,7 +124,7 @@ mod tests {
         match ledger.withdraw(signer, 100) {
             Ok(_) => panic!("Expected UnderFunded error, but got Ok(_)"),
             Err(e) => match e {
-                AccountingError::UnderFunded(account, amount) => {
+                ApplicationError::UnderFunded(account, amount) => {
                     assert_eq!(account, signer);
                     assert_eq!(amount, 100);
                 }
@@ -143,7 +143,7 @@ mod tests {
         match ledger.deposit(signer, std::u64::MAX) {
             Ok(_) => panic!("Expected OverFunded error, but got Ok(_)"),
             Err(e) => match e {
-                AccountingError::OverFunded(account, amount) => {
+                ApplicationError::OverFunded(account, amount) => {
                     assert_eq!(account, signer);
                     assert_eq!(amount, 18446744073709551615);
                 }
@@ -207,7 +207,7 @@ mod tests {
         match ledger.send(sender, receiver, 100) {
             Ok(tx) => panic!("Expected send to fail but but succeeded. Tx:{:?}", tx),
             Err(e) => match e {
-                AccountingError::UnderFunded(sender, 100) => {
+                ApplicationError::UnderFunded(sender, 100) => {
                     assert_eq!(*ledger.accounts.get(&sender).unwrap(), 10)
                 }
                 _ => panic!("Expected UnderFunded error, but got a different error"),
@@ -227,7 +227,7 @@ mod tests {
         match ledger.send(sender, receiver, std::u64::MAX) {
             Ok(tx) => panic!("Expected send to fail but but succeeded. Tx:{:?}", tx),
             Err(e) => match e {
-                AccountingError::OverFunded(sender, 18446744073709551615) => {
+                ApplicationError::OverFunded(sender, 18446744073709551615) => {
                     assert_eq!(*ledger.accounts.get(&sender).unwrap(), 10)
                 }
                 _ => panic!("Expected OverFunded error, but got a different error"),
